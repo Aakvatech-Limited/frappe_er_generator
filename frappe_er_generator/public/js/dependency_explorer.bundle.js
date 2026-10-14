@@ -76,12 +76,5 @@ function openExplorer() {
   dialog.show();
 }
 
-$(document).on("keydown.frappeERDependency", function (event) {
-  if (!(event.altKey && event.shiftKey && event.code === "Slash")) return;
-  if (event.ctrlKey || event.metaKey || event.repeat) return;
-  const target = $(event.target);
-  if (target.is("input,textarea,select") || target.closest('[contenteditable="true"],.modal').length) return;
-  if (!currentDocType()) return;
-  event.preventDefault();
-  openExplorer();
-});
+// Opened by the lightweight Desk launcher after frappe.require resolves.
+window.frappeERDependencyOpen = openExplorer;
