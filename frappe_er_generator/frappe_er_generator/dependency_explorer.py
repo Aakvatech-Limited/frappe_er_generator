@@ -33,7 +33,7 @@ def _doctype_metadata():
 
 
 @frappe.whitelist()
-def get_dependency_graph(doctype, depth=2, direction="both", include_child_tables=0):
+def get_dependency_graph(doctype, depth=1, direction="outgoing", include_child_tables=0):
     """Return explicit, directed metadata relationships within N hops.
 
     A source DocType Link field points to its referenced target.
