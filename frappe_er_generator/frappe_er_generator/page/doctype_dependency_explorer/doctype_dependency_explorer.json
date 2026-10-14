@@ -1,0 +1,14 @@
+{
+  "doctype": "Page",
+  "name": "doctype-dependency-explorer",
+  "page_name": "doctype-dependency-explorer",
+  "title": "DocType Dependency Explorer",
+  "module": "Frappe Er Generator",
+  "standard": "Yes",
+  "system_page": 0,
+  "roles": [
+    {
+      "role": "System Manager"
+    }
+  ]
+}
