@@ -32,7 +32,10 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
   const zoomInButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text("+");
   const zoomOutButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text("−");
   controls.append(exploreButton, fitButton, zoomInButton, zoomOutButton, findButton);
-  container.append($('<div class="small" style="margin-top:8px"></div>').text(__("Master: green · Transaction: blue · Child Table: yellow · Click a node to open its DocType.")));
+  container.append($('<div class="small" style="margin-top:8px"></div>').text(__("Master: green · Transaction: blue · Child Table: yellow · Click a node to open its DocType; click a connection to inspect its field.")));
+  const details = $('<div class="dependency-relationship-details small" role="status" aria-live="polite" style="margin:10px 0;padding:12px;border:1px solid var(--border-color);border-radius:8px"></div>');
+  container.append(details);
+  details.text(__("Select a connecting line to inspect its relationship."));
   const graphBox = container.find(".dependency-graph")[0];
   const summary = container.find(".dependency-summary");
   const state = { cy: null, loading: false };
@@ -41,8 +44,8 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
   function parseSettings() {
     const params = new URLSearchParams(window.location.search);
     doctypeInput.val(params.get("doctype") || "");
-    depthInput.val(params.get("depth") || "2");
-    directionInput.val(["both", "incoming", "outgoing"].includes(params.get("direction")) ? params.get("direction") : "both");
+    depthInput.val(params.get("depth") || "1");
+    directionInput.val(["both", "incoming", "outgoing"].includes(params.get("direction")) ? params.get("direction") : "outgoing");
     childInput.prop("checked", params.get("include_child_tables") === "1");
     layoutInput.val(["hierarchical", "left-to-right", "radial", "force", "grid"].includes(params.get("layout")) ? params.get("layout") : "hierarchical");
   }
@@ -82,7 +85,8 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
       if (state.cy) state.cy.destroy();
       state.cy = window.frappeERDependencyRenderGraph(graphBox, response.message, (name) => {
         frappe.set_route("Form", "DocType", name);
-      }, layoutInput.val());
+      }, layoutInput.val(), (edge) => window.frappeERDependencyRelationshipInspector(details, edge));
+      window.frappeERDependencyRelationshipInspector(details, null);
       state.root = response.message.root;
       summary.text(window.frappeERDependencyGraphSummary(response.message));
       const query = new URLSearchParams({
