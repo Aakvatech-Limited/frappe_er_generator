@@ -17,8 +17,54 @@ function graphElements(result) {
   ];
 }
 
+// Built-in Cytoscape layouts only: no extra extension or build dependency.
+const LAYOUTS = ["hierarchical", "left-to-right", "radial", "force", "grid"];
+
+function normalizedLayout(name) {
+  return LAYOUTS.includes(name) ? name : "hierarchical";
+}
+
+function graphLayout(cy, root, name) {
+  const layout = normalizedLayout(name);
+  const rootNode = cy.getElementById(root);
+  const common = { padding: 45, fit: true, animate: false };
+  if (layout === "hierarchical" || layout === "left-to-right") {
+    return {
+      ...common, name: "breadthfirst", directed: true,
+      roots: rootNode, circle: false,
+      spacingFactor: 1.4, avoidOverlap: true,
+      nodeDimensionsIncludeLabels: true,
+      maximal: false,
+      ...(layout === "left-to-right" ? { transform: (_node, position) => ({ x: position.y, y: position.x }) } : {}),
+    };
+  }
+  if (layout === "radial") {
+    return {
+      ...common, name: "concentric",
+      concentric: (node) => Math.max(0, 7 - (Number(node.data("level")) || 0)),
+      levelWidth: () => 1, minNodeSpacing: 45,
+      startAngle: -Math.PI / 2, clockwise: true,
+      equidistant: true, avoidOverlap: true,
+    };
+  }
+  if (layout === "force") {
+    return {
+      ...common, name: "cose", randomize: false,
+      nodeRepulsion: () => 650000, nodeOverlap: 22,
+      idealEdgeLength: () => 145, edgeElasticity: () => 90,
+      numIter: 600, gravity: 0.7,
+    };
+  }
+  return { ...common, name: "grid", avoidOverlap: true, condense: false, rows: undefined, cols: undefined };
+}
+
+function applyGraphLayout(cy, root, name) {
+  if (!cy || cy.destroyed()) return;
+  cy.layout(graphLayout(cy, root, name)).run();
+}
+
 // Shared by the quick preview and the full-page Desk explorer.
-function renderGraph(container, result, onNodeClick) {
+function renderGraph(container, result, onNodeClick, layoutName = "hierarchical") {
   const rootSelector = '[id = "' + result.root.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"]';
   const cy = cytoscape({
     container,
@@ -29,9 +75,10 @@ function renderGraph(container, result, onNodeClick) {
       { selector: "edge", style: { width: 1.5, "line-color": "#99a6b6", "target-arrow-color": "#99a6b6", "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.8 } },
       { selector: "node:selected", style: { "border-width": 3, "border-color": "#2274c7" } },
     ],
-    layout: { name: "breadthfirst", directed: true, roots: rootSelector, padding: 35, spacingFactor: 1.3 },
+    layout: { name: "preset" },
     minZoom: 0.15, maxZoom: 3,
   });
+  applyGraphLayout(cy, result.root, layoutName);
   cy.on("tap", "node", (event) => onNodeClick(event.target.data("id")));
   return cy;
 }
@@ -59,6 +106,7 @@ function openExplorer() {
       { fieldname: "include_child_tables", fieldtype: "Check", label: __("Include Child Tables"), default: 0 },
       { fieldname: "column", fieldtype: "Column Break" },
       { fieldname: "legend", fieldtype: "HTML", options: '<div style="font-size:12px">🟩 Master (non-submittable) &nbsp; 🟦 Transaction (submittable) &nbsp; 🟨 Child Table</div>' },
+      { fieldname: "layout", fieldtype: "Select", label: __("Graph Layout"), options: "hierarchical\nleft-to-right\nradial\nforce\ngrid", default: "hierarchical" },
       { fieldname: "graph", fieldtype: "HTML" },
     ],
     primary_action_label: __("Explore"),
@@ -80,7 +128,7 @@ function openExplorer() {
         dialog._dependencyCy = renderGraph(graphBox[0], result, (name) => {
           dialog.hide();
           frappe.set_route("Form", "DocType", name);
-        });
+        }, values.layout);
         fitButton.on("click", () => dialog._dependencyCy.fit(undefined, 35));
         zoomInButton.on("click", () => dialog._dependencyCy.zoom({ level: Math.min(3, dialog._dependencyCy.zoom() * 1.2), renderedPosition: { x: graphBox.width() / 2, y: graphBox.height() / 2 } }));
         zoomOutButton.on("click", () => dialog._dependencyCy.zoom({ level: Math.max(0.15, dialog._dependencyCy.zoom() / 1.2), renderedPosition: { x: graphBox.width() / 2, y: graphBox.height() / 2 } }));
@@ -102,6 +150,7 @@ function openExplorer() {
       depth: String(values.depth),
       direction: values.direction || "both",
       include_child_tables: values.include_child_tables ? "1" : "0",
+      layout: normalizedLayout(values.layout),
     });
     window.open("/app/doctype-dependency-explorer?" + params.toString(), "_blank", "noopener");
   }, __("Open in New Tab"));
@@ -116,3 +165,6 @@ function openExplorer() {
 window.frappeERDependencyOpen = openExplorer;
 window.frappeERDependencyRenderGraph = renderGraph;
 window.frappeERDependencyGraphSummary = graphSummary;
+
+window.frappeERDependencyApplyLayout = applyGraphLayout;
+window.frappeERDependencyNormalizeLayout = normalizedLayout;
