@@ -64,7 +64,7 @@ function applyGraphLayout(cy, root, name) {
 }
 
 // Shared by the quick preview and the full-page Desk explorer.
-function renderGraph(container, result, onNodeClick, layoutName = "hierarchical") {
+function renderGraph(container, result, onNodeClick, layoutName = "hierarchical", onEdgeClick = null) {
   const rootSelector = '[id = "' + result.root.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"]';
   const cy = cytoscape({
     container,
@@ -74,13 +74,38 @@ function renderGraph(container, result, onNodeClick, layoutName = "hierarchical"
       { selector: rootSelector, style: { "border-width": 3, "border-color": "#316bb2" } },
       { selector: "edge", style: { width: 1.5, "line-color": "#99a6b6", "target-arrow-color": "#99a6b6", "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.8 } },
       { selector: "node:selected", style: { "border-width": 3, "border-color": "#2274c7" } },
+      { selector: "edge:selected", style: { width: 4, "line-color": "#2274c7", "target-arrow-color": "#2274c7" } },
     ],
     layout: { name: "preset" },
     minZoom: 0.15, maxZoom: 3,
   });
   applyGraphLayout(cy, result.root, layoutName);
   cy.on("tap", "node", (event) => onNodeClick(event.target.data("id")));
+  if (onEdgeClick) cy.on("tap", "edge", (event) => onEdgeClick(event.target.data()));
   return cy;
+}
+
+// Only metadata from the existing graph API is displayed; no document records are queried.
+function relationshipInspector(container, edge) {
+  const panel = $(container);
+  panel.empty();
+  if (!edge) {
+    panel.append($("<span></span>").text(__("Select a connecting line to inspect its relationship.")));
+    return;
+  }
+  const title = $("<strong></strong>").text(__("Relationship details"));
+  const fields = [
+    [__("Source DocType"), edge.source],
+    [__("Target DocType"), edge.target],
+    [__("Linking field"), edge.fieldname || __("Not available")],
+    [__("Field type"), edge.fieldtype || __("Not available")],
+  ];
+  const table = $('<div style="display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin-top:8px"></div>');
+  fields.forEach(([label, value]) => {
+    table.append($("<span class='text-muted'></span>").text(label));
+    table.append($("<span></span>").text(value));
+  });
+  panel.append(title, table);
 }
 
 function graphSummary(result) {
@@ -101,8 +126,8 @@ function openExplorer() {
     size: "extra-large",
     fields: [
       { fieldname: "doctype", fieldtype: "Link", options: "DocType", label: __("Root DocType"), reqd: 1, default: doctype },
-      { fieldname: "depth", fieldtype: "Int", label: __("Depth"), default: 2, reqd: 1 },
-      { fieldname: "direction", fieldtype: "Select", label: __("Direction"), options: "both\nincoming\noutgoing", default: "both" },
+      { fieldname: "depth", fieldtype: "Int", label: __("Depth"), default: 1, reqd: 1 },
+      { fieldname: "direction", fieldtype: "Select", label: __("Direction"), options: "outgoing\nincoming\nboth", default: "outgoing" },
       { fieldname: "include_child_tables", fieldtype: "Check", label: __("Include Child Tables"), default: 0 },
       { fieldname: "column", fieldtype: "Column Break" },
       { fieldname: "legend", fieldtype: "HTML", options: '<div style="font-size:12px">🟩 Master (non-submittable) &nbsp; 🟦 Transaction (submittable) &nbsp; 🟨 Child Table</div>' },
@@ -127,12 +152,14 @@ function openExplorer() {
           .on("click", openFullPage);
         controls.append(newTabButton, fitButton, zoomInButton, zoomOutButton);
         const graphBox = $('<div style="width:100%;height:55vh;min-height:340px;border:1px solid var(--border-color);border-radius:8px"></div>');
+        const details = $('<div class="small" role="status" aria-live="polite" style="padding:10px;margin-top:8px;border:1px solid var(--border-color);border-radius:6px"></div>');
+        relationshipInspector(details, null);
         if (dialog._dependencyCy) dialog._dependencyCy.destroy();
-        container.empty().append(summary, controls, graphBox);
+        container.empty().append(summary, controls, graphBox, details);
         dialog._dependencyCy = renderGraph(graphBox[0], result, (name) => {
           dialog.hide();
           frappe.set_route("Form", "DocType", name);
-        }, values.layout);
+        }, values.layout, (edge) => relationshipInspector(details, edge));
         fitButton.on("click", () => dialog._dependencyCy.fit(undefined, 35));
         zoomInButton.on("click", () => dialog._dependencyCy.zoom({ level: Math.min(3, dialog._dependencyCy.zoom() * 1.2), renderedPosition: { x: graphBox.width() / 2, y: graphBox.height() / 2 } }));
         zoomOutButton.on("click", () => dialog._dependencyCy.zoom({ level: Math.max(0.15, dialog._dependencyCy.zoom() / 1.2), renderedPosition: { x: graphBox.width() / 2, y: graphBox.height() / 2 } }));
@@ -152,7 +179,7 @@ function openExplorer() {
     const params = new URLSearchParams({
       doctype: values.doctype,
       depth: String(values.depth),
-      direction: values.direction || "both",
+      direction: values.direction || "outgoing",
       include_child_tables: values.include_child_tables ? "1" : "0",
       layout: normalizedLayout(values.layout),
     });
@@ -176,6 +203,7 @@ function openExplorer() {
 window.frappeERDependencyOpen = openExplorer;
 window.frappeERDependencyRenderGraph = renderGraph;
 window.frappeERDependencyGraphSummary = graphSummary;
+window.frappeERDependencyRelationshipInspector = relationshipInspector;
 
 window.frappeERDependencyApplyLayout = applyGraphLayout;
 window.frappeERDependencyNormalizeLayout = normalizedLayout;
