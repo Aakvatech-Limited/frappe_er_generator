@@ -138,7 +138,7 @@ function openExplorer() {
       }
     },
   });
-  dialog.set_secondary_action(__("Open in New Tab"), () => {
+  dialog.set_secondary_action(() => {
     const values = dialog.get_values();
     if (!values) return;
     if (+values.depth < 1 || +values.depth > 6) {
@@ -153,7 +153,7 @@ function openExplorer() {
       layout: normalizedLayout(values.layout),
     });
     window.open("/app/doctype-dependency-explorer?" + params.toString(), "_blank", "noopener");
-  });
+  }, __("Open in New Tab"));
   activeDialog = dialog;
   dialog.onhide = () => {
     if (dialog._dependencyCy) dialog._dependencyCy.destroy();
