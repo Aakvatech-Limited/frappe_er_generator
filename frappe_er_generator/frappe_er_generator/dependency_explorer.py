@@ -104,7 +104,7 @@ def get_dependency_graph(doctype, depth=None, direction=None, include_child_tabl
     if direction not in ("both", "incoming", "outgoing"):
         frappe.throw("Invalid direction")
 
-    metadata = _doctype_metadata()
+    metadata = _cached_metadata(settings["cache_ttl"])
     if doctype not in metadata:
         frappe.throw("DocType not found")
 
