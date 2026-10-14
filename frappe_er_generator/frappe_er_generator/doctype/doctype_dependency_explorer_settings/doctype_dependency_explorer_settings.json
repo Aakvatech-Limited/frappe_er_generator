@@ -1,0 +1,63 @@
+{
+  "doctype": "DocType",
+  "name": "DocType Dependency Explorer Settings",
+  "module": "Frappe Er Generator",
+  "custom": 0,
+  "issingle": 1,
+  "istable": 0,
+  "editable_grid": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "default_direction",
+    "default_depth",
+    "default_include_child_tables",
+    "metadata_cache_ttl"
+  ],
+  "fields": [
+    {
+      "fieldname": "default_direction",
+      "label": "Default Direction",
+      "fieldtype": "Select",
+      "options": "Outgoing\nIncoming\nBoth",
+      "default": "Outgoing",
+      "reqd": 1
+    },
+    {
+      "fieldname": "default_depth",
+      "label": "Default Depth",
+      "fieldtype": "Int",
+      "default": "1",
+      "reqd": 1
+    },
+    {
+      "fieldname": "default_include_child_tables",
+      "label": "Include Child Tables by Default",
+      "fieldtype": "Check",
+      "default": "0"
+    },
+    {
+      "fieldname": "metadata_cache_ttl",
+      "label": "Metadata Cache TTL (seconds)",
+      "fieldtype": "Int",
+      "default": "300",
+      "description": "0 disables the cache; cache is also invalidated when DocTypes, Custom Fields, or Property Setters change."
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "print": 0,
+      "email": 0,
+      "export": 0
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "actions": [],
+  "links": [],
+  "states": []
+}

@@ -74,6 +74,7 @@ function renderGraph(container, result, onNodeClick, layoutName = "hierarchical"
       { selector: rootSelector, style: { "border-width": 3, "border-color": "#316bb2" } },
       { selector: "edge", style: { width: 1.5, "line-color": "#99a6b6", "target-arrow-color": "#99a6b6", "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.8 } },
       { selector: "node:selected", style: { "border-width": 3, "border-color": "#2274c7" } },
+      { selector: "node.search-match", style: { "border-width": 3, "border-color": "#df9b1c" } },
       { selector: "edge:selected", style: { width: 4, "line-color": "#2274c7", "target-arrow-color": "#2274c7" } },
     ],
     layout: { name: "preset" },
@@ -186,18 +187,32 @@ function openExplorer() {
     window.open("/app/doctype-dependency-explorer?" + params.toString(), "_blank", "noopener");
   };
   dialog.set_secondary_action(openFullPage, __("Open in New Tab"));
+
   activeDialog = dialog;
   dialog.onhide = () => {
     if (dialog._dependencyCy) dialog._dependencyCy.destroy();
     activeDialog = null;
   };
   dialog.show();
+  // Load site-wide defaults without delaying the dialog or overwriting user edits.
+  frappe.call({
+    method: "frappe_er_generator.frappe_er_generator.dependency_explorer.get_explorer_settings",
+  }).then(({ message: settings }) => {
+    if (!settings || activeDialog !== dialog) return;
+    if (Number(dialog.get_value("depth")) === 1) dialog.set_value("depth", settings.depth);
+    if (dialog.get_value("direction") === "outgoing") dialog.set_value("direction", settings.direction);
+    if (!dialog.get_value("include_child_tables")) dialog.set_value("include_child_tables", settings.include_child_tables);
+  }).catch((error) => console.warn("Explorer defaults unavailable:", error));
   // Header action remains visible before and after graph generation.
   const headerButton = $('<button type="button" class="btn btn-sm btn-primary" style="margin-left:12px"></button>')
     .text(__("Open Full Page ↗"))
     .attr("title", __("Open diagram in a new browser tab"))
     .on("click", openFullPage);
   dialog.$wrapper.find(".modal-header .modal-title").first().after(headerButton);
+  const settingsButton = $('<button type="button" class="btn btn-sm btn-default" style="margin-left:6px"></button>')
+    .text(__("Settings"))
+    .on("click", () => frappe.set_route("Form", "DocType Dependency Explorer Settings"));
+  headerButton.after(settingsButton);
 }
 
 window.frappeERDependencyOpen = openExplorer;

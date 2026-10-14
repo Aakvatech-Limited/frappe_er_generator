@@ -31,22 +31,26 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
   const fitButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text(__("Fit to screen"));
   const zoomInButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text("+");
   const zoomOutButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text("−");
-  controls.append(exploreButton, fitButton, zoomInButton, zoomOutButton, findButton);
+  const previousButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text(__("Previous"));
+  const countLabel = $('<span class="small text-muted" aria-live="polite"></span>').text(__("0 matches"));
+  const settingsButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text(__("Settings"));
+  settingsButton.on("click", () => frappe.set_route("Form", "DocType Dependency Explorer Settings"));
+  controls.append(exploreButton, fitButton, zoomInButton, zoomOutButton, previousButton, findButton, countLabel, settingsButton);
   container.append($('<div class="small" style="margin-top:8px"></div>').text(__("Master: green · Transaction: blue · Child Table: yellow · Click a node to open its DocType; click a connection to inspect its field.")));
   const details = $('<div class="dependency-relationship-details small" role="status" aria-live="polite" style="margin:10px 0;padding:12px;border:1px solid var(--border-color);border-radius:8px"></div>');
   container.append(details);
   details.text(__("Select a connecting line to inspect its relationship."));
   const graphBox = container.find(".dependency-graph")[0];
   const summary = container.find(".dependency-summary");
-  const state = { cy: null, loading: false };
+  const state = { cy: null, loading: false, matches: [], matchIndex: -1, lastQuery: null };
   wrapper._dependencyExplorer = state;
 
-  function parseSettings() {
+  function parseSettings(defaults = {}) {
     const params = new URLSearchParams(window.location.search);
     doctypeInput.val(params.get("doctype") || "");
-    depthInput.val(params.get("depth") || "1");
-    directionInput.val(["both", "incoming", "outgoing"].includes(params.get("direction")) ? params.get("direction") : "outgoing");
-    childInput.prop("checked", params.get("include_child_tables") === "1");
+    depthInput.val(params.get("depth") || defaults.depth || 1);
+    directionInput.val(["both", "incoming", "outgoing"].includes(params.get("direction")) ? params.get("direction") : (defaults.direction || "outgoing"));
+    childInput.prop("checked", params.has("include_child_tables") ? params.get("include_child_tables") === "1" : Boolean(defaults.include_child_tables));
     layoutInput.val(["hierarchical", "left-to-right", "radial", "force", "grid"].includes(params.get("layout")) ? params.get("layout") : "hierarchical");
   }
   function zoom(factor) {
@@ -87,6 +91,7 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
         frappe.set_route("Form", "DocType", name);
       }, layoutInput.val(), (edge) => window.frappeERDependencyRelationshipInspector(details, edge));
       window.frappeERDependencyRelationshipInspector(details, null);
+      resetSearch();
       state.root = response.message.root;
       summary.text(window.frappeERDependencyGraphSummary(response.message));
       const query = new URLSearchParams({
@@ -107,21 +112,43 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
       exploreButton.prop("disabled", false);
     }
   }
-  function focusNode() {
+  function resetSearch() {
+    state.matches = [];
+    state.matchIndex = -1;
+    state.lastQuery = null;
+    countLabel.text(__("0 matches"));
+    if (state.cy) state.cy.nodes().removeClass("search-match");
+  }
+  function navigateMatches(step) {
     if (!state.cy) return;
-    const query = String(findInput.val() || "").trim().toLowerCase();
-    if (!query) return;
-    const node = state.cy.nodes().filter((n) => n.data("label").toLowerCase().includes(query)).first();
-    if (!node.length) {
-      frappe.show_alert({ message: __("No matching DocType in this graph"), indicator: "orange" });
+    const query = String(findInput.val() || "").trim().toLocaleLowerCase();
+    if (!query) { resetSearch(); return; }
+    if (query !== state.lastQuery) {
+      state.matches = state.cy.nodes().filter((node) =>
+        String(node.data("label") || "").toLocaleLowerCase().includes(query)
+      ).sort((a, b) => String(a.data("label")).localeCompare(String(b.data("label")))).toArray();
+      state.lastQuery = query;
+      state.matchIndex = -1;
+      state.cy.nodes().removeClass("search-match");
+      state.cy.collection(state.matches).addClass("search-match");
+    }
+    if (!state.matches.length) {
+      countLabel.text(__("0 matches"));
       return;
     }
+    state.matchIndex = (state.matchIndex + step + state.matches.length) % state.matches.length;
+    const node = state.matches[state.matchIndex];
     state.cy.$(":selected").unselect();
     node.select();
-    state.cy.animate({ center: { eles: node }, zoom: Math.min(1.5, Math.max(state.cy.zoom(), 0.8)) }, { duration: 250 });
+    state.cy.animate({ center: { eles: node }, zoom: Math.min(1.5, Math.max(state.cy.zoom(), 0.8)) }, { duration: 220 });
+    countLabel.text((state.matchIndex + 1) + " / " + state.matches.length);
   }
-  findButton.on("click", focusNode);
-  findInput.on("keydown", (event) => { if (event.key === "Enter") focusNode(); });
+  findButton.text(__("Next")).on("click", () => navigateMatches(1));
+  previousButton.on("click", () => navigateMatches(-1));
+  findInput.on("input", resetSearch);
+  findInput.on("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); navigateMatches(event.shiftKey ? -1 : 1); }
+  });
   layoutInput.on("change", () => {
     if (!state.cy || !state.root || typeof window.frappeERDependencyApplyLayout !== "function") return;
     window.frappeERDependencyApplyLayout(state.cy, state.root, layoutInput.val());
@@ -141,8 +168,17 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
     if (state.cy) state.cy.destroy();
     state.cy = null;
   };
-  parseSettings();
-  if (doctypeInput.val()) explore();
+  // Explicit URL settings always override saved site-wide defaults.
+  frappe.call({
+    method: "frappe_er_generator.frappe_er_generator.dependency_explorer.get_explorer_settings",
+  }).then(({ message }) => {
+    parseSettings(message || {});
+    if (doctypeInput.val()) explore();
+  }).catch((error) => {
+    console.warn("Explorer settings unavailable:", error);
+    parseSettings();
+    if (doctypeInput.val()) explore();
+  });
 };
 frappe.pages["doctype-dependency-explorer"].on_page_show = function (wrapper) {
   if (wrapper._dependencyExplorer && wrapper._dependencyExplorer.cy) {
