@@ -24,6 +24,7 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
   const depthInput = input(__("Depth"), $('<input class="form-control input-sm" style="width:72px" type="number" min="1" max="6" />'));
   const directionInput = input(__("Direction"), $('<select class="form-control input-sm"><option value="both">Both</option><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></select>'));
   const childInput = input(__("Child tables"), $('<input type="checkbox" style="margin:9px 0" />'));
+  const layoutInput = input(__("Graph layout"), $('<select class="form-control input-sm"><option value="hierarchical">Hierarchical</option><option value="left-to-right">Left to right</option><option value="radial">Radial</option><option value="force">Force directed</option><option value="grid">Grid</option></select>'));
   const findInput = input(__("Find node"), $('<input class="form-control input-sm" style="width:160px" type="search" placeholder="DocType name" />'));
   const findButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text(__("Find"));
   const exploreButton = $('<button type="button" class="btn btn-primary btn-sm"></button>').text(__("Explore"));
@@ -43,6 +44,7 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
     depthInput.val(params.get("depth") || "2");
     directionInput.val(["both", "incoming", "outgoing"].includes(params.get("direction")) ? params.get("direction") : "both");
     childInput.prop("checked", params.get("include_child_tables") === "1");
+    layoutInput.val(["hierarchical", "left-to-right", "radial", "force", "grid"].includes(params.get("layout")) ? params.get("layout") : "hierarchical");
   }
   function zoom(factor) {
     if (!state.cy) return;
@@ -80,13 +82,15 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
       if (state.cy) state.cy.destroy();
       state.cy = window.frappeERDependencyRenderGraph(graphBox, response.message, (name) => {
         frappe.set_route("Form", "DocType", name);
-      });
+      }, layoutInput.val());
+      state.root = response.message.root;
       summary.text(window.frappeERDependencyGraphSummary(response.message));
       const query = new URLSearchParams({
         doctype: values.doctype,
         depth: String(values.depth),
         direction: values.direction,
         include_child_tables: String(values.include_child_tables),
+        layout: layoutInput.val(),
       });
       window.history.replaceState(window.history.state, "", window.location.pathname + "?" + query.toString());
       state.cy.resize();
@@ -114,6 +118,13 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
   }
   findButton.on("click", focusNode);
   findInput.on("keydown", (event) => { if (event.key === "Enter") focusNode(); });
+  layoutInput.on("change", () => {
+    if (!state.cy || !state.root || typeof window.frappeERDependencyApplyLayout !== "function") return;
+    window.frappeERDependencyApplyLayout(state.cy, state.root, layoutInput.val());
+    const params = new URLSearchParams(window.location.search);
+    params.set("layout", layoutInput.val());
+    window.history.replaceState(window.history.state, "", window.location.pathname + "?" + params.toString());
+  });
   exploreButton.on("click", explore);
   fitButton.on("click", () => { if (state.cy) { state.cy.resize(); state.cy.fit(undefined, 35); } });
   zoomInButton.on("click", () => zoom(1.2));
