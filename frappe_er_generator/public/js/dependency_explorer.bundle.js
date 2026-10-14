@@ -7,8 +7,39 @@ let activeDialog = null;
 function currentDocType() {
   const route = frappe.get_route();
   if (!route || !["Form", "List"].includes(route[0])) return null;
-  // Standard Desk routes are Form/<DocType>/<name> and List/<DocType>.
   return route[1] || null;
+}
+
+function graphElements(result) {
+  return [
+    ...result.nodes.map((n) => ({ data: { ...n, color: COLORS[n.kind] || "#eee" } })),
+    ...result.edges.map((e, i) => ({ data: { id: "edge-" + i, ...e } })),
+  ];
+}
+
+// Shared by the quick preview and the full-page Desk explorer.
+function renderGraph(container, result, onNodeClick) {
+  const rootSelector = '[id = "' + result.root.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"]';
+  const cy = cytoscape({
+    container,
+    elements: graphElements(result),
+    style: [
+      { selector: "node", style: { "background-color": "data(color)", label: "data(label)", color: "#233247", "font-size": 11, "text-valign": "center", "text-halign": "center", "text-wrap": "wrap", "text-max-width": 120, width: "label", height: 36, padding: "15px", "border-color": "#8b9eb1", "border-width": 1, shape: "round-rectangle" } },
+      { selector: rootSelector, style: { "border-width": 3, "border-color": "#316bb2" } },
+      { selector: "edge", style: { width: 1.5, "line-color": "#99a6b6", "target-arrow-color": "#99a6b6", "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.8 } },
+      { selector: "node:selected", style: { "border-width": 3, "border-color": "#2274c7" } },
+    ],
+    layout: { name: "breadthfirst", directed: true, roots: rootSelector, padding: 35, spacingFactor: 1.3 },
+    minZoom: 0.15, maxZoom: 3,
+  });
+  cy.on("tap", "node", (event) => onNodeClick(event.target.data("id")));
+  return cy;
+}
+
+function graphSummary(result) {
+  const c = result.counts;
+  return c.doctypes + " DocTypes · " + c.relationships + " relationships · " +
+    c.masters + " masters · " + c.transactions + " transactions · " + c.child_tables + " child tables";
 }
 
 function openExplorer() {
@@ -37,36 +68,42 @@ function openExplorer() {
         const response = await frappe.call({ method: METHOD, args: values, freeze: true });
         const result = response.message;
         if (!result) return;
-        const summary = $('<div class="small text-muted" style="margin:8px 0"></div>');
-        summary.text(`${result.counts.doctypes} DocTypes · ${result.counts.relationships} relationships · ${result.counts.masters} masters · ${result.counts.transactions} transactions`);
+        const summary = $('<div class="small text-muted" style="margin:8px 0"></div>').text(graphSummary(result));
+        const controls = $('<div style="margin:8px 0;display:flex;gap:8px"></div>');
+        const fitButton = $('<button type="button" class="btn btn-xs btn-default"></button>').text(__("Fit to screen"));
+        const zoomInButton = $('<button type="button" class="btn btn-xs btn-default">+</button>');
+        const zoomOutButton = $('<button type="button" class="btn btn-xs btn-default">−</button>');
+        controls.append(fitButton, zoomInButton, zoomOutButton);
         const graphBox = $('<div style="width:100%;height:55vh;min-height:340px;border:1px solid var(--border-color);border-radius:8px"></div>');
-        container.empty().append(summary, graphBox);
         if (dialog._dependencyCy) dialog._dependencyCy.destroy();
-        const elements = [
-          ...result.nodes.map((n) => ({ data: { ...n, color: COLORS[n.kind] || "#eee" } })),
-          ...result.edges.map((e, i) => ({ data: { id: `edge-${i}`, ...e } })),
-        ];
-        dialog._dependencyCy = cytoscape({
-          container: graphBox[0], elements,
-          style: [
-            { selector: "node", style: { "background-color": "data(color)", label: "data(label)", color: "#233247", "font-size": 11, "text-valign": "center", "text-halign": "center", "text-wrap": "wrap", "text-max-width": 120, width: "label", height: 36, padding: "15px", "border-color": "#8b9eb1", "border-width": 1, shape: "round-rectangle" } },
-            { selector: 'node[id = "' + result.root.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"]', style: { "border-width": 3, "border-color": "#316bb2" } },
-            { selector: "edge", style: { width: 1.5, "line-color": "#99a6b6", "target-arrow-color": "#99a6b6", "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.8 } },
-            { selector: "node:selected", style: { "border-width": 3, "border-color": "#2274c7" } },
-          ],
-          layout: { name: "breadthfirst", directed: true, roots: '[id = "' + result.root.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"]', padding: 35, spacingFactor: 1.3 },
-          minZoom: 0.15, maxZoom: 3,
-        });
-        dialog._dependencyCy.on("tap", "node", (event) => {
-          const name = event.target.data("id");
+        container.empty().append(summary, controls, graphBox);
+        dialog._dependencyCy = renderGraph(graphBox[0], result, (name) => {
           dialog.hide();
           frappe.set_route("Form", "DocType", name);
         });
+        fitButton.on("click", () => dialog._dependencyCy.fit(undefined, 35));
+        zoomInButton.on("click", () => dialog._dependencyCy.zoom({ level: Math.min(3, dialog._dependencyCy.zoom() * 1.2), renderedPosition: { x: graphBox.width() / 2, y: graphBox.height() / 2 } }));
+        zoomOutButton.on("click", () => dialog._dependencyCy.zoom({ level: Math.max(0.15, dialog._dependencyCy.zoom() / 1.2), renderedPosition: { x: graphBox.width() / 2, y: graphBox.height() / 2 } }));
       } catch (error) {
         console.error("Dependency explorer:", error);
         frappe.msgprint(__("Unable to load DocType dependencies. Check permissions and server logs."));
       }
     },
+  });
+  dialog.set_secondary_action(__("Open in New Tab"), () => {
+    const values = dialog.get_values();
+    if (!values) return;
+    if (+values.depth < 1 || +values.depth > 6) {
+      frappe.msgprint(__("Depth must be between 1 and 6"));
+      return;
+    }
+    const params = new URLSearchParams({
+      doctype: values.doctype,
+      depth: String(values.depth),
+      direction: values.direction || "both",
+      include_child_tables: values.include_child_tables ? "1" : "0",
+    });
+    window.open("/app/doctype-dependency-explorer?" + params.toString(), "_blank", "noopener");
   });
   activeDialog = dialog;
   dialog.onhide = () => {
@@ -76,5 +113,6 @@ function openExplorer() {
   dialog.show();
 }
 
-// Opened by the lightweight Desk launcher after frappe.require resolves.
 window.frappeERDependencyOpen = openExplorer;
+window.frappeERDependencyRenderGraph = renderGraph;
+window.frappeERDependencyGraphSummary = graphSummary;
