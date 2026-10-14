@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "frappe_er_generator"
-dynamic = ["version"]
+version = "0.0.1"
 description = "Entity relationship and dependency explorer for Frappe DocTypes"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,9 +12,7 @@ license = { text = "MIT" }
 authors = [
     { name = "Sumit Jain", email = "jainmit23@gmail.com" }
 ]
-dependencies = [
-    "graphviz"
-]
+dependencies = ["graphviz"]
 
 [project.urls]
 Repository = "https://github.com/Aakvatech-Limited/frappe_er_generator"
@@ -24,9 +22,6 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["frappe_er_generator*"]
-
-[tool.setuptools.dynamic]
-version = { attr = "frappe_er_generator.__version__" }
 
 [tool.bench.frappe-dependencies]
 frappe = ">=16.0.0-dev,<17.0.0"
