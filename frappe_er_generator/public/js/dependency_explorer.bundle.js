@@ -74,6 +74,7 @@ function renderGraph(container, result, onNodeClick, layoutName = "hierarchical"
       { selector: rootSelector, style: { "border-width": 3, "border-color": "#316bb2" } },
       { selector: "edge", style: { width: 1.5, "line-color": "#99a6b6", "target-arrow-color": "#99a6b6", "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.8 } },
       { selector: "node:selected", style: { "border-width": 3, "border-color": "#2274c7" } },
+      { selector: "node.search-match", style: { "border-width": 3, "border-color": "#df9b1c" } },
       { selector: "edge:selected", style: { width: 4, "line-color": "#2274c7", "target-arrow-color": "#2274c7" } },
     ],
     layout: { name: "preset" },
