@@ -1,0 +1,118 @@
+/* Dedicated full-page Cytoscape viewer. Source bundle loads lazily. */
+frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
+  const page = frappe.ui.make_app_page({
+    parent: wrapper,
+    title: __("DocType Dependency Explorer"),
+    single_column: true,
+  });
+  const container = $(page.body);
+  container.empty().append(
+    '<div class="dependency-full-page">' +
+      '<div class="dependency-controls" style="display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:12px 0"></div>' +
+      '<div class="dependency-summary small text-muted" style="margin:8px 0"></div>' +
+      '<div class="dependency-graph" style="height:calc(100vh - 235px);min-height:440px;width:100%;border:1px solid var(--border-color);border-radius:8px"></div>' +
+    '</div>'
+  );
+  const controls = container.find(".dependency-controls");
+  function input(label, html) {
+    const block = $('<label style="display:flex;flex-direction:column;gap:4px;font-weight:normal;margin:0"></label>');
+    block.append($("<span></span>").text(label), html);
+    controls.append(block);
+    return html;
+  }
+  const doctypeInput = input(__("Root DocType"), $('<input class="form-control input-sm" style="width:190px" type="text" />'));
+  const depthInput = input(__("Depth"), $('<input class="form-control input-sm" style="width:72px" type="number" min="1" max="6" />'));
+  const directionInput = input(__("Direction"), $('<select class="form-control input-sm"><option value="both">Both</option><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></select>'));
+  const childInput = input(__("Child tables"), $('<input type="checkbox" style="margin:9px 0" />'));
+  const exploreButton = $('<button type="button" class="btn btn-primary btn-sm"></button>').text(__("Explore"));
+  const fitButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text(__("Fit to screen"));
+  const zoomInButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text("+");
+  const zoomOutButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text("−");
+  controls.append(exploreButton, fitButton, zoomInButton, zoomOutButton);
+  const graphBox = container.find(".dependency-graph")[0];
+  const summary = container.find(".dependency-summary");
+  const state = { cy: null, loading: false };
+  wrapper._dependencyExplorer = state;
+
+  function parseSettings() {
+    const params = new URLSearchParams(window.location.search);
+    doctypeInput.val(params.get("doctype") || "");
+    depthInput.val(params.get("depth") || "2");
+    directionInput.val(["both", "incoming", "outgoing"].includes(params.get("direction")) ? params.get("direction") : "both");
+    childInput.prop("checked", params.get("include_child_tables") === "1");
+  }
+  function zoom(factor) {
+    if (!state.cy) return;
+    const level = Math.min(3, Math.max(0.15, state.cy.zoom() * factor));
+    state.cy.zoom({ level, renderedPosition: { x: graphBox.clientWidth / 2, y: graphBox.clientHeight / 2 } });
+  }
+  async function explore() {
+    if (state.loading) return;
+    const values = {
+      doctype: String(doctypeInput.val() || "").trim(),
+      depth: Number(depthInput.val()),
+      direction: directionInput.val(),
+      include_child_tables: childInput.is(":checked") ? 1 : 0,
+    };
+    if (!values.doctype || !Number.isInteger(values.depth) || values.depth < 1 || values.depth > 6) {
+      frappe.msgprint(__("Choose a root DocType and a depth between 1 and 6."));
+      return;
+    }
+    state.loading = true;
+    exploreButton.prop("disabled", true);
+    try {
+      await new Promise((resolve, reject) => {
+        frappe.require("dependency_explorer.bundle.js", () => {
+          if (typeof window.frappeERDependencyRenderGraph !== "function") {
+            reject(new Error("Dependency explorer bundle did not initialize"));
+          } else resolve();
+        });
+      });
+      const response = await frappe.call({
+        method: "frappe_er_generator.frappe_er_generator.dependency_explorer.get_dependency_graph",
+        args: values,
+        freeze: true,
+      });
+      if (!response.message) return;
+      if (state.cy) state.cy.destroy();
+      state.cy = window.frappeERDependencyRenderGraph(graphBox, response.message, (name) => {
+        frappe.set_route("Form", "DocType", name);
+      });
+      summary.text(window.frappeERDependencyGraphSummary(response.message));
+      const query = new URLSearchParams({
+        doctype: values.doctype,
+        depth: String(values.depth),
+        direction: values.direction,
+        include_child_tables: String(values.include_child_tables),
+      });
+      window.history.replaceState(window.history.state, "", window.location.pathname + "?" + query.toString());
+      state.cy.resize();
+      state.cy.fit(undefined, 35);
+    } catch (error) {
+      console.error("Dependency explorer full page:", error);
+      frappe.msgprint(__("Unable to load DocType dependencies. Check permissions and server logs."));
+    } finally {
+      state.loading = false;
+      exploreButton.prop("disabled", false);
+    }
+  }
+  exploreButton.on("click", explore);
+  fitButton.on("click", () => { if (state.cy) { state.cy.resize(); state.cy.fit(undefined, 35); } });
+  zoomInButton.on("click", () => zoom(1.2));
+  zoomOutButton.on("click", () => zoom(1 / 1.2));
+  doctypeInput.on("keydown", (event) => { if (event.key === "Enter") explore(); });
+  const onResize = () => { if (state.cy) state.cy.resize(); };
+  window.addEventListener("resize", onResize);
+  wrapper._dependencyCleanup = () => {
+    window.removeEventListener("resize", onResize);
+    if (state.cy) state.cy.destroy();
+    state.cy = null;
+  };
+  parseSettings();
+  if (doctypeInput.val()) explore();
+};
+frappe.pages["doctype-dependency-explorer"].on_page_show = function (wrapper) {
+  if (wrapper._dependencyExplorer && wrapper._dependencyExplorer.cy) {
+    wrapper._dependencyExplorer.cy.resize();
+  }
+};
