@@ -199,3 +199,10 @@ app_include_js = "/assets/frappe_er_generator/js/dependency_explorer_launcher.js
 # auth_hooks = [
 #	"frappe_er_generator.auth.validate"
 # ]
+
+# Invalidate the cached schema graph whenever schema metadata is edited.
+doc_events = {
+    "DocType": {"on_update": "frappe_er_generator.frappe_er_generator.dependency_explorer.invalidate_metadata_cache", "on_trash": "frappe_er_generator.frappe_er_generator.dependency_explorer.invalidate_metadata_cache"},
+    "Custom Field": {"on_update": "frappe_er_generator.frappe_er_generator.dependency_explorer.invalidate_metadata_cache", "on_trash": "frappe_er_generator.frappe_er_generator.dependency_explorer.invalidate_metadata_cache"},
+    "Property Setter": {"on_update": "frappe_er_generator.frappe_er_generator.dependency_explorer.invalidate_metadata_cache", "on_trash": "frappe_er_generator.frappe_er_generator.dependency_explorer.invalidate_metadata_cache"},
+}
