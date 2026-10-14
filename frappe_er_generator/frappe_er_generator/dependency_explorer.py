@@ -14,6 +14,51 @@ def _allowed():
         frappe.throw("System Manager role is required to inspect DocType dependencies", frappe.PermissionError)
 
 
+CACHE_KEY = "frappe_er_generator:doctype_dependency_metadata:v1"
+
+
+def _settings():
+    """Read site-wide settings with conservative fallbacks."""
+    defaults = {"direction": "outgoing", "depth": 1, "include_child_tables": 0, "cache_ttl": 300}
+    try:
+        doc = frappe.get_single("DocType Dependency Explorer Settings")
+        direction = str(doc.default_direction or "Outgoing").lower()
+        depth = int(doc.default_depth or 1)
+        ttl = int(doc.metadata_cache_ttl if doc.metadata_cache_ttl is not None else 300)
+        defaults.update({
+            "direction": direction if direction in ("incoming", "outgoing", "both") else "outgoing",
+            "depth": depth if 1 <= depth <= MAX_DEPTH else 1,
+            "include_child_tables": int(bool(doc.default_include_child_tables)),
+            "cache_ttl": min(3600, max(0, ttl)),
+        })
+    except (frappe.DoesNotExistError, ValueError, TypeError, AttributeError):
+        pass
+    return defaults
+
+
+@frappe.whitelist()
+def get_explorer_settings():
+    _allowed()
+    values = _settings()
+    return {k: values[k] for k in ("direction", "depth", "include_child_tables")}
+
+
+def invalidate_metadata_cache(doc=None, method=None):
+    """Called after DocType, Custom Field, and Property Setter updates."""
+    frappe.cache().delete_value(CACHE_KEY)
+
+
+def _cached_metadata(ttl):
+    if ttl:
+        stored = frappe.cache().get_value(CACHE_KEY)
+        if stored is not None:
+            return stored
+    metadata = _doctype_metadata()
+    if ttl:
+        frappe.cache().set_value(CACHE_KEY, metadata, expires_in_sec=ttl)
+    return metadata
+
+
 def _doctype_metadata():
     """Use site metadata to account for installed apps and Custom Fields."""
     names = frappe.get_all("DocType", pluck="name", order_by="name asc")
@@ -33,13 +78,20 @@ def _doctype_metadata():
 
 
 @frappe.whitelist()
-def get_dependency_graph(doctype, depth=1, direction="outgoing", include_child_tables=0):
+def get_dependency_graph(doctype, depth=None, direction=None, include_child_tables=None):
     """Return explicit, directed metadata relationships within N hops.
 
     A source DocType Link field points to its referenced target.
     A parent Table field points to its child DocType. No records are queried.
     """
     _allowed()
+    settings = _settings()
+    if depth is None or depth == "":
+        depth = settings["depth"]
+    if direction is None or direction == "":
+        direction = settings["direction"]
+    if include_child_tables is None or include_child_tables == "":
+        include_child_tables = settings["include_child_tables"]
     if not isinstance(doctype, str) or not frappe.db.exists("DocType", doctype):
         frappe.throw("Select a valid DocType")
     try:
