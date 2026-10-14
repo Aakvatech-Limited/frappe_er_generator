@@ -21,7 +21,7 @@ def _doctype_metadata():
     for name in names:
         meta = frappe.get_meta(name)
         graph[name] = {
-            "kind": "Child Table" if meta.istable else ("Transaction" if meta.issubmittable else "Master"),
+            "kind": "Child Table" if meta.istable else ("Transaction" if meta.is_submittable else "Master"),
             "module": meta.module,
             "fields": [
                 {"fieldname": f.fieldname, "target": f.options, "fieldtype": f.fieldtype}
