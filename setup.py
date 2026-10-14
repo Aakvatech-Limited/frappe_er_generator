@@ -1,19 +1,8 @@
-from setuptools import setup, find_packages
+"""Compatibility shim for legacy pip/bench installs.
 
-with open("requirements.txt") as f:
-	install_requires = f.read().strip().split("\n")
+PEP 621 project metadata is owned by pyproject.toml; avoid importing
+frappe_er_generator during isolated editable builds.
+"""
+from setuptools import setup
 
-# get version from __version__ variable in frappe_er_generator/__init__.py
-from frappe_er_generator import __version__ as version
-
-setup(
-	name="frappe_er_generator",
-	version=version,
-	description="ERD generator for frappe doctypes",
-	author="Sumit Jain",
-	author_email="jainmit23@gmail.com",
-	packages=find_packages(),
-	zip_safe=False,
-	include_package_data=True,
-	install_requires=install_requires
-)
+setup()
