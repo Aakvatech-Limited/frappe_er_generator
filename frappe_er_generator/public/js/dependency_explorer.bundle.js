@@ -121,7 +121,11 @@ function openExplorer() {
         const fitButton = $('<button type="button" class="btn btn-xs btn-default"></button>').text(__("Fit to screen"));
         const zoomInButton = $('<button type="button" class="btn btn-xs btn-default">+</button>');
         const zoomOutButton = $('<button type="button" class="btn btn-xs btn-default">−</button>');
-        controls.append(fitButton, zoomInButton, zoomOutButton);
+        const newTabButton = $('<button type="button" class="btn btn-sm btn-primary"></button>')
+          .text(__("Open Full Page ↗"))
+          .attr("title", __("Open dependency graph in a new browser tab"))
+          .on("click", openFullPage);
+        controls.append(newTabButton, fitButton, zoomInButton, zoomOutButton);
         const graphBox = $('<div style="width:100%;height:55vh;min-height:340px;border:1px solid var(--border-color);border-radius:8px"></div>');
         if (dialog._dependencyCy) dialog._dependencyCy.destroy();
         container.empty().append(summary, controls, graphBox);
@@ -138,7 +142,7 @@ function openExplorer() {
       }
     },
   });
-  dialog.set_secondary_action(() => {
+  const openFullPage = () => {
     const values = dialog.get_values();
     if (!values) return;
     if (+values.depth < 1 || +values.depth > 6) {
@@ -153,13 +157,20 @@ function openExplorer() {
       layout: normalizedLayout(values.layout),
     });
     window.open("/app/doctype-dependency-explorer?" + params.toString(), "_blank", "noopener");
-  }, __("Open in New Tab"));
+  };
+  dialog.set_secondary_action(openFullPage, __("Open in New Tab"));
   activeDialog = dialog;
   dialog.onhide = () => {
     if (dialog._dependencyCy) dialog._dependencyCy.destroy();
     activeDialog = null;
   };
   dialog.show();
+  // Header action remains visible before and after graph generation.
+  const headerButton = $('<button type="button" class="btn btn-sm btn-primary" style="margin-left:12px"></button>')
+    .text(__("Open Full Page ↗"))
+    .attr("title", __("Open diagram in a new browser tab"))
+    .on("click", openFullPage);
+  dialog.$wrapper.find(".modal-header .modal-title").first().after(headerButton);
 }
 
 window.frappeERDependencyOpen = openExplorer;
