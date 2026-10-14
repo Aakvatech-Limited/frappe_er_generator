@@ -24,11 +24,14 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
   const depthInput = input(__("Depth"), $('<input class="form-control input-sm" style="width:72px" type="number" min="1" max="6" />'));
   const directionInput = input(__("Direction"), $('<select class="form-control input-sm"><option value="both">Both</option><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></select>'));
   const childInput = input(__("Child tables"), $('<input type="checkbox" style="margin:9px 0" />'));
+  const findInput = input(__("Find node"), $('<input class="form-control input-sm" style="width:160px" type="search" placeholder="DocType name" />'));
+  const findButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text(__("Find"));
   const exploreButton = $('<button type="button" class="btn btn-primary btn-sm"></button>').text(__("Explore"));
   const fitButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text(__("Fit to screen"));
   const zoomInButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text("+");
   const zoomOutButton = $('<button type="button" class="btn btn-default btn-sm"></button>').text("−");
-  controls.append(exploreButton, fitButton, zoomInButton, zoomOutButton);
+  controls.append(exploreButton, fitButton, zoomInButton, zoomOutButton, findButton);
+  container.append($('<div class="small" style="margin-top:8px"></div>').text(__("Master: green · Transaction: blue · Child Table: yellow · Click a node to open its DocType.")));
   const graphBox = container.find(".dependency-graph")[0];
   const summary = container.find(".dependency-summary");
   const state = { cy: null, loading: false };
@@ -96,6 +99,21 @@ frappe.pages["doctype-dependency-explorer"].on_page_load = function (wrapper) {
       exploreButton.prop("disabled", false);
     }
   }
+  function focusNode() {
+    if (!state.cy) return;
+    const query = String(findInput.val() || "").trim().toLowerCase();
+    if (!query) return;
+    const node = state.cy.nodes().filter((n) => n.data("label").toLowerCase().includes(query)).first();
+    if (!node.length) {
+      frappe.show_alert({ message: __("No matching DocType in this graph"), indicator: "orange" });
+      return;
+    }
+    state.cy.$(":selected").unselect();
+    node.select();
+    state.cy.animate({ center: { eles: node }, zoom: Math.min(1.5, Math.max(state.cy.zoom(), 0.8)) }, { duration: 250 });
+  }
+  findButton.on("click", focusNode);
+  findInput.on("keydown", (event) => { if (event.key === "Enter") focusNode(); });
   exploreButton.on("click", explore);
   fitButton.on("click", () => { if (state.cy) { state.cy.resize(); state.cy.fit(undefined, 35); } });
   zoomInButton.on("click", () => zoom(1.2));
