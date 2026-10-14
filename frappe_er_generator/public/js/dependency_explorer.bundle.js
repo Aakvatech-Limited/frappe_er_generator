@@ -35,7 +35,7 @@ function graphLayout(cy, root, name) {
       spacingFactor: 1.4, avoidOverlap: true,
       nodeDimensionsIncludeLabels: true,
       maximal: false,
-      ...(layout === "left-to-right" ? { direction: "rightward" } : {}),
+      ...(layout === "left-to-right" ? { transform: (_node, position) => ({ x: position.y, y: position.x }) } : {}),
     };
   }
   if (layout === "radial") {
